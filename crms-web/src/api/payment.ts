@@ -147,7 +147,9 @@ export const paymentRecordApi = {
     return http.post<unknown, ImportResultVO>('/payment-records/import', fd, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
-  }
+  },
+  downloadTemplate: () =>
+    http.get<unknown, Blob>('/payment-records/template', { responseType: 'blob' })
 }
 
 export const agingApi = {

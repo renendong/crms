@@ -14,4 +14,7 @@ public interface CustomerImportService {
      * <p>逐行独立事务：单行失败只记录错误并跳过，不影响其它行。
      */
     ImportResultVO importCustomers(MultipartFile file);
+
+    /** 返回导入模板表头列名，用于生成下载模板。 */
+    String[] getTemplateHeaders();
 }

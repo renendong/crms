@@ -14,4 +14,7 @@ public interface ContractImportService {
      * <p>合同编号自动生成，初始状态为 DRAFT；逐行独立事务。
      */
     ImportResultVO importContracts(MultipartFile file);
+
+    /** 返回导入模板表头列名，用于生成下载模板。 */
+    String[] getTemplateHeaders();
 }

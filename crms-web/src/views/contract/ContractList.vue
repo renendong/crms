@@ -123,6 +123,8 @@
       title="批量导入合同"
       hint="Excel 列顺序：合同名称 / 合同类型（销售/采购/服务/其他） / 客户名称 / 合同金额 / 签订日期 (yyyy-MM-dd) / 履约开始日期 / 履约结束日期 / 提醒天数 / 备注。合同编号自动生成。"
       :import-fn="contractApi.importExcel"
+      :download-template-fn="contractApi.downloadTemplate"
+      template-filename="合同导入模板.xlsx"
       @finished="loadData"
     />
   </div>

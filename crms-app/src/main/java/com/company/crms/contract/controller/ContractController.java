@@ -4,6 +4,7 @@ import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.company.crms.common.response.ImportResultVO;
 import com.company.crms.common.response.PageResult;
 import com.company.crms.common.response.Result;
+import com.company.crms.common.util.ExcelImportHelper;
 import com.company.crms.contract.dto.ContractQuery;
 import com.company.crms.contract.dto.CreateContractDTO;
 import com.company.crms.contract.dto.TransitionDTO;
@@ -32,6 +33,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 import java.util.List;
 import java.util.Map;
@@ -74,6 +80,17 @@ public class ContractController {
     @PostMapping("/import")
     public Result<ImportResultVO> importExcel(@RequestParam("file") MultipartFile file) {
         return Result.ok(importService.importContracts(file));
+    }
+
+    @Operation(summary = "下载合同导入模板")
+    @SaCheckPermission("contract:import")
+    @GetMapping("/template")
+    public void downloadTemplate(HttpServletResponse response) throws IOException {
+        String filename = URLEncoder.encode("合同导入模板.xlsx", StandardCharsets.UTF_8);
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        response.setHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+        ExcelImportHelper.writeTemplate(response.getOutputStream(),
+                importService.getTemplateHeaders(), "合同导入模板");
     }
 
     @Operation(summary = "更新合同")

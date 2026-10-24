@@ -153,6 +153,8 @@ export const customerApi = {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
   },
+  downloadTemplate: () =>
+    http.get<unknown, Blob>('/customers/template', { responseType: 'blob' }),
   update: (id: string, dto: UpdateCustomerDTO) => put<void>(`/customers/${id}`, dto),
   remove: (id: string) => del<void>(`/customers/${id}`),
   hardDelete: (id: string, reason?: string) =>

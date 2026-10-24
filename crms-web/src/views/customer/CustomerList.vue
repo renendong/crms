@@ -116,6 +116,8 @@
       title="批量导入客户"
       hint="Excel 列顺序：客户名称 / 客户类型（企业/政府/个人） / 统一社会信用代码 / 客户等级（A/B/C） / 所属行业 / 地区编码 / 地址 / 备注。第一行为表头。"
       :import-fn="customerApi.importExcel"
+      :download-template-fn="customerApi.downloadTemplate"
+      template-filename="客户导入模板.xlsx"
       @finished="loadData"
     />
   </div>

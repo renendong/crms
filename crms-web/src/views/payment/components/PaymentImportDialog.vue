@@ -9,6 +9,10 @@
       Excel 列顺序：合同编号 / 到账日期 (yyyy-MM-dd) / 金额 / 付款方 / 凭证号 / 备注。第一行为表头。
     </el-alert>
 
+    <div class="mt-2">
+      <el-button link type="primary" :icon="Download" @click="onDownload">下载导入模板</el-button>
+    </div>
+
     <el-upload
       drag
       class="mt-2"
@@ -21,6 +25,9 @@
       <div class="el-upload__text">
         将 Excel 文件拖到此处，或<em>点击上传</em>
       </div>
+      <template #tip>
+        <div class="el-upload__tip">支持 .xls / .xlsx，单次最多 2000 行数据。</div>
+      </template>
     </el-upload>
 
     <div v-if="uploading" class="mt-2">
@@ -53,7 +60,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { ElMessage, type UploadRequestOptions } from 'element-plus'
-import { UploadFilled } from '@element-plus/icons-vue'
+import { Download, UploadFilled } from '@element-plus/icons-vue'
 import { paymentRecordApi, type ImportResultVO } from '@/api/payment'
 
 const props = defineProps<{ visible: boolean }>()
@@ -92,6 +99,22 @@ async function onUpload(opt: UploadRequestOptions) {
     emit('finished')
   } finally {
     uploading.value = false
+  }
+}
+
+async function onDownload() {
+  try {
+    const blob = await paymentRecordApi.downloadTemplate()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = '回款导入模板.xlsx'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+  } catch (e) {
+    ElMessage.error('模板下载失败')
   }
 }
 </script>

@@ -103,6 +103,8 @@ export const contractApi = {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
   },
+  downloadTemplate: () =>
+    http.get<unknown, Blob>('/contracts/template', { responseType: 'blob' }),
   update: (id: string, dto: UpdateContractDTO) => put<void>(`/contracts/${id}`, dto),
   remove: (id: string) => del<void>(`/contracts/${id}`),
   hardDelete: (id: string, reason?: string) =>

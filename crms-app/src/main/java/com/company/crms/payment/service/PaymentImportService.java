@@ -10,4 +10,7 @@ public interface PaymentImportService {
      * 全部成功才提交，任一行失败仅记录错误并跳过。
      */
     ImportResultVO importRecords(MultipartFile file);
+
+    /** 返回导入模板表头列名，用于生成下载模板。 */
+    String[] getTemplateHeaders();
 }
