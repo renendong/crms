@@ -1,6 +1,7 @@
 import { get, post, put, del } from './http'
 import http from './http'
 import type { PageResult } from './customer'
+import type { ImportResultVO } from './types'
 
 // 注意：所有 ID（id / customerId / ownerId / deptId 等）后端使用 Snowflake 64bit Long，
 // 已在 Jackson 中序列化为字符串。前端必须以 string 形态传递，禁止再用 Number() 强转，
@@ -95,6 +96,13 @@ export const contractApi = {
   list: (q: ContractQuery) => get<PageResult<ContractVO>>('/contracts', { params: q }),
   detail: (id: string) => get<ContractVO>(`/contracts/${id}`),
   create: (dto: CreateContractDTO) => post<string>('/contracts', dto),
+  importExcel: (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return http.post<unknown, ImportResultVO>('/contracts/import', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
   update: (id: string, dto: UpdateContractDTO) => put<void>(`/contracts/${id}`, dto),
   remove: (id: string) => del<void>(`/contracts/${id}`),
   hardDelete: (id: string, reason?: string) =>

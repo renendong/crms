@@ -1,5 +1,8 @@
 import http, { get, post, put, del } from './http'
 import type { PageResult } from './customer'
+import type { ImportResultVO } from './types'
+
+export type { ImportResultVO } from './types'
 
 // 注意：所有 ID 字段后端使用 Snowflake 64bit Long，已序列化为字符串。
 // 前端必须以 string 形态传递，禁止 Number() 强转。
@@ -117,13 +120,6 @@ export interface AgingDrillVO {
   planDate: string
   unsettledAmount: number
   overdueDays: number
-}
-
-export interface ImportResultVO {
-  total: number
-  success: number
-  failed: number
-  errors: { row: number; message: string }[]
 }
 
 export const paymentPlanApi = {

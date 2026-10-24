@@ -1,6 +1,6 @@
 package com.company.crms.payment.service;
 
-import com.company.crms.payment.vo.ImportResultVO;
+import com.company.crms.common.response.ImportResultVO;
 import org.springframework.web.multipart.MultipartFile;
 
 public interface PaymentImportService {

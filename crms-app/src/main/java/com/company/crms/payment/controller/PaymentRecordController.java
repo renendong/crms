@@ -9,7 +9,7 @@ import com.company.crms.payment.dto.RecordQuery;
 import com.company.crms.payment.dto.RedReverseDTO;
 import com.company.crms.payment.service.PaymentRecordService;
 import com.company.crms.payment.service.RedReverseService;
-import com.company.crms.payment.vo.ImportResultVO;
+import com.company.crms.common.response.ImportResultVO;
 import com.company.crms.payment.service.PaymentImportService;
 import com.company.crms.payment.vo.PaymentRecordVO;
 import io.swagger.v3.oas.annotations.Operation;

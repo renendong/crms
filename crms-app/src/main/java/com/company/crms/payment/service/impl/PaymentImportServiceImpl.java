@@ -10,7 +10,7 @@ import com.company.crms.contract.mapper.ContractMapper;
 import com.company.crms.payment.dto.CreateRecordDTO;
 import com.company.crms.payment.service.PaymentImportService;
 import com.company.crms.payment.service.PaymentRecordService;
-import com.company.crms.payment.vo.ImportResultVO;
+import com.company.crms.common.response.ImportResultVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

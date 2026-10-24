@@ -64,6 +64,7 @@ declare module 'vue' {
     ElTreeSelect: typeof import('element-plus/es')['ElTreeSelect']
     ElUpload: typeof import('element-plus/es')['ElUpload']
     EmptyHint: typeof import('./../components/EmptyHint.vue')['default']
+    ImportExcelDialog: typeof import('./../components/ImportExcelDialog.vue')['default']
     NotificationBell: typeof import('./../components/NotificationBell.vue')['default']
     PasswordPromptDialog: typeof import('./../components/PasswordPromptDialog.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
