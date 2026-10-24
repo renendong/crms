@@ -1,14 +1,17 @@
 package com.company.crms.contract.controller;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
+import com.company.crms.common.response.ImportResultVO;
 import com.company.crms.common.response.PageResult;
 import com.company.crms.common.response.Result;
+import com.company.crms.common.util.ExcelImportHelper;
 import com.company.crms.contract.dto.ContractQuery;
 import com.company.crms.contract.dto.CreateContractDTO;
 import com.company.crms.contract.dto.TransitionDTO;
 import com.company.crms.contract.dto.UpdateContractDTO;
 import com.company.crms.contract.entity.ContractNote;
 import com.company.crms.contract.enums.ContractStatus;
+import com.company.crms.contract.service.ContractImportService;
 import com.company.crms.contract.service.ContractNoteService;
 import com.company.crms.contract.service.ContractService;
 import com.company.crms.contract.vo.ContractVO;
@@ -29,6 +32,12 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 import java.util.List;
 import java.util.Map;
@@ -41,6 +50,7 @@ import java.util.Map;
 public class ContractController {
 
     private final ContractService service;
+    private final ContractImportService importService;
     private final ContractNoteService noteService;
     private final ChangeLogService changeLogService;
 
@@ -63,6 +73,24 @@ public class ContractController {
     @PostMapping
     public Result<Long> create(@Valid @RequestBody CreateContractDTO dto) {
         return Result.ok(service.create(dto));
+    }
+
+    @Operation(summary = "批量导入合同（Excel）")
+    @SaCheckPermission("contract:import")
+    @PostMapping("/import")
+    public Result<ImportResultVO> importExcel(@RequestParam("file") MultipartFile file) {
+        return Result.ok(importService.importContracts(file));
+    }
+
+    @Operation(summary = "下载合同导入模板")
+    @SaCheckPermission("contract:import")
+    @GetMapping("/template")
+    public void downloadTemplate(HttpServletResponse response) throws IOException {
+        String filename = URLEncoder.encode("合同导入模板.xlsx", StandardCharsets.UTF_8);
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        response.setHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+        ExcelImportHelper.writeTemplate(response.getOutputStream(),
+                importService.getTemplateHeaders(), "合同导入模板");
     }
 
     @Operation(summary = "更新合同")

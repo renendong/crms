@@ -8,6 +8,9 @@
           <el-button v-perm="'customer:create'" type="primary" @click="onCreate">
             <el-icon><Plus /></el-icon>新建客户
           </el-button>
+          <el-button v-perm="'customer:import'" :icon="Upload" @click="importVisible = true">
+            批量导入
+          </el-button>
           <el-button
             v-perm="'customer:merge'"
             :disabled="selected.length < 2"
@@ -107,6 +110,16 @@
       :candidates="selected"
       @saved="onMergeDone"
     />
+
+    <ImportExcelDialog
+      v-model:visible="importVisible"
+      title="批量导入客户"
+      hint="Excel 列顺序：客户名称 / 客户类型（企业/政府/个人） / 统一社会信用代码 / 客户等级（A/B/C） / 所属行业 / 地区编码 / 地址 / 备注。第一行为表头。"
+      :import-fn="customerApi.importExcel"
+      :download-template-fn="customerApi.downloadTemplate"
+      template-filename="客户导入模板.xlsx"
+      @finished="loadData"
+    />
   </div>
 </template>
 
@@ -114,13 +127,14 @@
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Connection, Plus, Refresh } from '@element-plus/icons-vue'
+import { Connection, Plus, Refresh, Upload } from '@element-plus/icons-vue'
 import { customerApi, type CustomerQuery, type CustomerVO } from '@/api/customer'
 import { ActiveStatus, CustomerType as ContractCustomerType } from '@/utils/enum'
 import { formatDateTime } from '@/utils/format'
 import CustomerSearchBar from './components/CustomerSearchBar.vue'
 import CustomerFormDrawer from './components/CustomerFormDrawer.vue'
 import CustomerMergeDialog from './components/CustomerMergeDialog.vue'
+import ImportExcelDialog from '@/components/ImportExcelDialog.vue'
 
 const router = useRouter()
 
@@ -133,6 +147,7 @@ const selected = ref<CustomerVO[]>([])
 const formVisible = ref(false)
 const formRecord = ref<CustomerVO | null>(null)
 const mergeVisible = ref(false)
+const importVisible = ref(false)
 
 async function loadData() {
   loading.value = true

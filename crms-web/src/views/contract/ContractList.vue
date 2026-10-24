@@ -39,6 +39,9 @@
         <el-button v-perm="'contract:create'" type="primary" :icon="Plus" @click="onCreate">
           新建合同
         </el-button>
+        <el-button v-perm="'contract:import'" :icon="Upload" @click="importVisible = true">
+          批量导入
+        </el-button>
         <el-button :icon="Refresh" circle @click="loadData" />
       </div>
 
@@ -114,6 +117,16 @@
       :record="formRecord"
       @saved="onSaved"
     />
+
+    <ImportExcelDialog
+      v-model:visible="importVisible"
+      title="批量导入合同"
+      hint="Excel 列顺序：合同名称 / 合同类型（销售/采购/服务/其他） / 客户名称 / 合同金额 / 签订日期 (yyyy-MM-dd) / 履约开始日期 / 履约结束日期 / 提醒天数 / 备注。合同编号自动生成。"
+      :import-fn="contractApi.importExcel"
+      :download-template-fn="contractApi.downloadTemplate"
+      template-filename="合同导入模板.xlsx"
+      @finished="loadData"
+    />
   </div>
 </template>
 
@@ -121,7 +134,7 @@
 import { onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh, RefreshLeft, Search } from '@element-plus/icons-vue'
+import { Plus, Refresh, RefreshLeft, Search, Upload } from '@element-plus/icons-vue'
 import {
   contractApi,
   ContractType,
@@ -131,6 +144,7 @@ import {
 } from '@/api/contract'
 import { formatDate } from '@/utils/format'
 import ContractFormDrawer from './components/ContractFormDrawer.vue'
+import ImportExcelDialog from '@/components/ImportExcelDialog.vue'
 
 const router = useRouter()
 
@@ -148,6 +162,7 @@ const loading = ref(false)
 
 const formVisible = ref(false)
 const formRecord = ref<ContractVO | null>(null)
+const importVisible = ref(false)
 
 async function loadData() {
   loading.value = true

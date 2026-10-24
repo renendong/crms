@@ -1,4 +1,5 @@
-import { get, post, put, del } from './http'
+import http, { get, post, put, del } from './http'
+import type { ImportResultVO } from './types'
 
 // 注意：所有 ID（id / ownerId / deptId / customerId 等）后端使用 Snowflake 64bit Long，
 // 已在 Jackson 中序列化为字符串。前端必须以 string 形态传递，禁止再用 Number() 强转，
@@ -145,6 +146,15 @@ export const customerApi = {
   detail: (id: string) => get<CustomerVO>(`/customers/${id}`),
   aggregate: (id: string) => get<CustomerAggregateVO>(`/customers/${id}/aggregate`),
   create: (dto: CreateCustomerDTO) => post<string>('/customers', dto),
+  importExcel: (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return http.post<unknown, ImportResultVO>('/customers/import', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
+  downloadTemplate: () =>
+    http.get<unknown, Blob>('/customers/template', { responseType: 'blob' }),
   update: (id: string, dto: UpdateCustomerDTO) => put<void>(`/customers/${id}`, dto),
   remove: (id: string) => del<void>(`/customers/${id}`),
   hardDelete: (id: string, reason?: string) =>

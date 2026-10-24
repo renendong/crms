@@ -1,6 +1,6 @@
 package com.company.crms.payment.service;
 
-import com.company.crms.payment.vo.ImportResultVO;
+import com.company.crms.common.response.ImportResultVO;
 import org.springframework.web.multipart.MultipartFile;
 
 public interface PaymentImportService {
@@ -10,4 +10,7 @@ public interface PaymentImportService {
      * 全部成功才提交，任一行失败仅记录错误并跳过。
      */
     ImportResultVO importRecords(MultipartFile file);
+
+    /** 返回导入模板表头列名，用于生成下载模板。 */
+    String[] getTemplateHeaders();
 }

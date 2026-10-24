@@ -1,12 +1,15 @@
 package com.company.crms.customer.controller;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
+import com.company.crms.common.response.ImportResultVO;
 import com.company.crms.common.response.PageResult;
 import com.company.crms.common.response.Result;
+import com.company.crms.common.util.ExcelImportHelper;
 import com.company.crms.customer.dto.CreateCustomerDTO;
 import com.company.crms.customer.dto.CustomerQuery;
 import com.company.crms.customer.dto.MergeCustomerDTO;
 import com.company.crms.customer.dto.UpdateCustomerDTO;
+import com.company.crms.customer.service.CustomerImportService;
 import com.company.crms.customer.service.CustomerService;
 import com.company.crms.customer.vo.CustomerAggregateVO;
 import com.company.crms.customer.vo.CustomerDuplicateVO;
@@ -30,6 +33,12 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 @Tag(name = "客户管理")
 @RestController
@@ -39,6 +48,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class CustomerController {
 
     private final CustomerService service;
+    private final CustomerImportService importService;
     private final ChangeLogService changeLogService;
 
     @Operation(summary = "客户列表（分页 + 关键词 + 范围保护）")
@@ -60,6 +70,24 @@ public class CustomerController {
     @PostMapping
     public Result<Long> create(@Valid @RequestBody CreateCustomerDTO dto) {
         return Result.ok(service.create(dto));
+    }
+
+    @Operation(summary = "批量导入客户（Excel）")
+    @SaCheckPermission("customer:import")
+    @PostMapping("/import")
+    public Result<ImportResultVO> importExcel(@RequestParam("file") MultipartFile file) {
+        return Result.ok(importService.importCustomers(file));
+    }
+
+    @Operation(summary = "下载客户导入模板")
+    @SaCheckPermission("customer:import")
+    @GetMapping("/template")
+    public void downloadTemplate(HttpServletResponse response) throws IOException {
+        String filename = URLEncoder.encode("客户导入模板.xlsx", StandardCharsets.UTF_8);
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        response.setHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+        ExcelImportHelper.writeTemplate(response.getOutputStream(),
+                importService.getTemplateHeaders(), "客户导入模板");
     }
 
     @Operation(summary = "更新客户")

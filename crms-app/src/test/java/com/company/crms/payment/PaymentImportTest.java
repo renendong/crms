@@ -6,7 +6,7 @@ import com.company.crms.contract.mapper.ContractMapper;
 import com.company.crms.payment.dto.CreateRecordDTO;
 import com.company.crms.payment.service.PaymentRecordService;
 import com.company.crms.payment.service.impl.PaymentImportServiceImpl;
-import com.company.crms.payment.vo.ImportResultVO;
+import com.company.crms.common.response.ImportResultVO;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;

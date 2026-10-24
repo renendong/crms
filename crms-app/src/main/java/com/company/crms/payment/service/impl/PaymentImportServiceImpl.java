@@ -5,12 +5,13 @@ import com.alibaba.excel.context.AnalysisContext;
 import com.alibaba.excel.event.AnalysisEventListener;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.company.crms.common.annotation.OperationLog;
+import com.company.crms.common.response.ImportResultVO;
+import com.company.crms.common.util.ExcelImportHelper;
 import com.company.crms.contract.entity.Contract;
 import com.company.crms.contract.mapper.ContractMapper;
 import com.company.crms.payment.dto.CreateRecordDTO;
 import com.company.crms.payment.service.PaymentImportService;
 import com.company.crms.payment.service.PaymentRecordService;
-import com.company.crms.payment.vo.ImportResultVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -19,29 +20,60 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class PaymentImportServiceImpl implements PaymentImportService {
 
+    private static final String[] HEADERS = {
+            "合同编号", "到账日期", "金额", "付款方", "凭证号", "备注"
+    };
+
     private final ContractMapper contractMapper;
     private final PaymentRecordService recordService;
 
     @Override
-    @OperationLog(module = "回款", action = "批量导入", recordParams = false)
+    @OperationLog(module = "回款", action = "批量导入", type = "CREATE", recordParams = false)
     public ImportResultVO importRecords(MultipartFile file) {
         ImportResultVO result = new ImportResultVO();
+        Set<String> seenVoucher = new HashSet<>();
         try {
             EasyExcel.read(file.getInputStream(), new AnalysisEventListener<Map<Integer, String>>() {
+
+                private boolean headerValid = false;
+                private boolean headerChecked = false;
+
+                @Override
+                public void invokeHeadMap(Map<Integer, String> headMap, AnalysisContext context) {
+                    ExcelImportHelper.validateHeader(HEADERS, headMap, "回款");
+                    headerValid = true;
+                    headerChecked = true;
+                }
+
                 @Override
                 public void invoke(Map<Integer, String> row, AnalysisContext ctx) {
+                    if (!headerChecked) {
+                        ExcelImportHelper.validateHeader(HEADERS, row, "回款");
+                        headerChecked = true;
+                        return;
+                    }
+                    if (!headerValid) {
+                        return;
+                    }
+                    if (ExcelImportHelper.isEmptyRow(row)) {
+                        return;
+                    }
+                    if (result.getTotal() >= ExcelImportHelper.MAX_ROWS) {
+                        throw new IllegalArgumentException("单次导入不能超过 " + ExcelImportHelper.MAX_ROWS + " 行");
+                    }
                     int rowIndex = ctx.readRowHolder().getRowIndex() + 1;
                     result.setTotal(result.getTotal() + 1);
                     try {
-                        importRow(row, rowIndex);
+                        importRow(row, seenVoucher);
                         result.setSuccess(result.getSuccess() + 1);
                     } catch (Exception ex) {
                         result.setFailed(result.getFailed() + 1);
@@ -57,17 +89,37 @@ public class PaymentImportServiceImpl implements PaymentImportService {
             }).headRowNumber(1).sheet().doRead();
         } catch (IOException e) {
             throw new RuntimeException("导入失败：" + e.getMessage(), e);
+        } catch (RuntimeException e) {
+            if (result.getTotal() == 0 && result.getSuccess() == 0 && result.getFailed() == 0) {
+                result.setFailed(1);
+                result.getErrors().add(new ImportResultVO.RowError(0, unwrapMessage(e)));
+            } else {
+                throw e;
+            }
         }
         return result;
     }
 
-    private void importRow(Map<Integer, String> row, int rowIndex) {
-        String contractCode = trim(row.get(0));
-        String arrivalStr = trim(row.get(1));
-        String amountStr = trim(row.get(2));
-        String payer = trim(row.get(3));
-        String voucherNo = trim(row.get(4));
-        String remark = trim(row.get(5));
+    private static String unwrapMessage(Throwable e) {
+        Throwable t = e;
+        while (t.getCause() != null && t.getCause() != t) {
+            t = t.getCause();
+        }
+        return t.getMessage() == null ? e.getMessage() : t.getMessage();
+    }
+
+    @Override
+    public String[] getTemplateHeaders() {
+        return HEADERS;
+    }
+
+    private void importRow(Map<Integer, String> row, Set<String> seenVoucher) {
+        String contractCode = ExcelImportHelper.trim(row.get(0));
+        String arrivalStr = ExcelImportHelper.trim(row.get(1));
+        String amountStr = ExcelImportHelper.trim(row.get(2));
+        String payer = ExcelImportHelper.trim(row.get(3));
+        String voucherNo = ExcelImportHelper.trim(row.get(4));
+        String remark = ExcelImportHelper.trim(row.get(5));
 
         if (contractCode == null) {
             throw new IllegalArgumentException("合同编号不能为空");
@@ -78,8 +130,16 @@ public class PaymentImportServiceImpl implements PaymentImportService {
         if (c == null) {
             throw new IllegalArgumentException("合同 [" + contractCode + "] 不存在");
         }
-        LocalDate arrival = parseDate(arrivalStr);
-        BigDecimal amount = parseAmount(amountStr);
+        LocalDate arrival = ExcelImportHelper.parseDateFlexible(arrivalStr, "到账日期");
+        BigDecimal amount = ExcelImportHelper.parseAmount(amountStr, "金额");
+        ExcelImportHelper.checkLength(payer, 100, "付款方");
+        if (voucherNo != null) {
+            ExcelImportHelper.checkLength(voucherNo, 255, "凭证号");
+            if (!seenVoucher.add(voucherNo)) {
+                throw new IllegalArgumentException("文件内已存在相同的凭证号：" + voucherNo);
+            }
+        }
+        ExcelImportHelper.checkLength(remark, 500, "备注");
 
         CreateRecordDTO dto = new CreateRecordDTO();
         dto.setContractId(c.getId());
@@ -89,35 +149,5 @@ public class PaymentImportServiceImpl implements PaymentImportService {
         dto.setVoucherNo(voucherNo);
         dto.setRemark(remark);
         recordService.create(dto);
-    }
-
-    private static String trim(String s) {
-        if (s == null) return null;
-        String t = s.trim();
-        return t.isEmpty() ? null : t;
-    }
-
-    private static LocalDate parseDate(String s) {
-        if (s == null) throw new IllegalArgumentException("到账日期不能为空");
-        try {
-            return LocalDate.parse(s, DateTimeFormatter.ISO_DATE);
-        } catch (Exception e) {
-            try {
-                return LocalDate.parse(s, DateTimeFormatter.ofPattern("yyyy/M/d"));
-            } catch (Exception e2) {
-                throw new IllegalArgumentException("到账日期格式错误，请用 yyyy-MM-dd");
-            }
-        }
-    }
-
-    private static BigDecimal parseAmount(String s) {
-        if (s == null) throw new IllegalArgumentException("金额不能为空");
-        try {
-            BigDecimal v = new BigDecimal(s.replace(",", ""));
-            if (v.signum() <= 0) throw new IllegalArgumentException("金额必须大于 0");
-            return v;
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("金额格式错误");
-        }
     }
 }
