@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -120,5 +121,125 @@ class PaymentImportTest {
 
         ImportResultVO r = importService.importRecords(file);
         assertEquals(1, r.getSuccess());
+    }
+
+    @Test
+    void should_skip_empty_row() {
+        Contract c = new Contract();
+        c.setId(1L);
+        when(contractMapper.selectOne(any())).thenReturn(c);
+        when(recordService.create(any(CreateRecordDTO.class))).thenReturn(1L);
+
+        byte[] data = buildExcel(List.of(
+                Arrays.asList("CT-A", "2026-04-01", "1000", "客户A", "V001", ""),
+                Arrays.asList("", "", "", "", "", ""),
+                Arrays.asList("CT-A", "2026-04-02", "2000", "客户B", "V002", "")
+        ));
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "records.xlsx", "x", data);
+
+        ImportResultVO r = importService.importRecords(file);
+        assertEquals(2, r.getTotal());
+        assertEquals(2, r.getSuccess());
+        verify(recordService, times(2)).create(any());
+    }
+
+    @Test
+    void should_fail_when_amount_has_three_decimals() {
+        Contract c = new Contract();
+        c.setId(1L);
+        when(contractMapper.selectOne(any())).thenReturn(c);
+
+        byte[] data = buildExcel(List.of(
+                Arrays.asList("CT-A", "2026-04-01", "100.123", "客户A", "V001", "")
+        ));
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "records.xlsx", "x", data);
+
+        ImportResultVO r = importService.importRecords(file);
+        assertEquals(1, r.getFailed());
+        assertTrue(r.getErrors().get(0).getMessage().contains("2 位小数"));
+    }
+
+    @Test
+    void should_parse_excel_serial_date() {
+        Contract c = new Contract();
+        c.setId(1L);
+        when(contractMapper.selectOne(any())).thenReturn(c);
+        when(recordService.create(any(CreateRecordDTO.class))).thenAnswer(invocation -> {
+            CreateRecordDTO dto = invocation.getArgument(0);
+            assertEquals(java.time.LocalDate.of(2025, 1, 1), dto.getArrivalDate());
+            return 1L;
+        });
+
+        byte[] data = buildExcel(List.of(
+                Arrays.asList("CT-A", "45658", "1000", "客户A", "V001", "")
+        ));
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "records.xlsx", "x", data);
+
+        ImportResultVO r = importService.importRecords(file);
+        assertEquals(1, r.getSuccess());
+    }
+
+    @Test
+    void should_fail_second_duplicate_voucher_in_same_file() {
+        Contract c = new Contract();
+        c.setId(1L);
+        when(contractMapper.selectOne(any())).thenReturn(c);
+        when(recordService.create(any(CreateRecordDTO.class))).thenReturn(1L);
+
+        byte[] data = buildExcel(List.of(
+                Arrays.asList("CT-A", "2026-04-01", "1000", "客户A", "V-DUP", ""),
+                Arrays.asList("CT-A", "2026-04-02", "2000", "客户B", "V-DUP", "")
+        ));
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "records.xlsx", "x", data);
+
+        ImportResultVO r = importService.importRecords(file);
+        assertEquals(1, r.getSuccess());
+        assertEquals(1, r.getFailed());
+        assertTrue(r.getErrors().get(0).getMessage().contains("文件内已存在相同的凭证号"));
+    }
+
+    @Test
+    void should_fail_when_payer_exceeds_max_length() {
+        Contract c = new Contract();
+        c.setId(1L);
+        when(contractMapper.selectOne(any())).thenReturn(c);
+
+        String longPayer = "x".repeat(101);
+        byte[] data = buildExcel(List.of(
+                Arrays.asList("CT-A", "2026-04-01", "1000", longPayer, "V001", "")
+        ));
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "records.xlsx", "x", data);
+
+        ImportResultVO r = importService.importRecords(file);
+        assertEquals(1, r.getFailed());
+        assertTrue(r.getErrors().get(0).getMessage().contains("付款方"));
+    }
+
+    @Test
+    void should_return_header_error_when_columns_wrong() {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        EasyExcel.write(out)
+                .head(Arrays.asList(
+                        java.util.Collections.singletonList("合同号"),
+                        java.util.Collections.singletonList("日期"),
+                        java.util.Collections.singletonList("金额"),
+                        java.util.Collections.singletonList("付款方"),
+                        java.util.Collections.singletonList("凭证号"),
+                        java.util.Collections.singletonList("备注")
+                ))
+                .sheet("回款")
+                .doWrite(List.of(Arrays.asList("CT-A", "2026-04-01", "1000", "A", "V001", "")));
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "records.xlsx", "x", out.toByteArray());
+
+        ImportResultVO r = importService.importRecords(file);
+        assertEquals(0, r.getTotal());
+        assertEquals(1, r.getFailed());
+        assertTrue(r.getErrors().get(0).getMessage().contains("表头不正确"));
     }
 }
