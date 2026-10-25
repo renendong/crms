@@ -1,10 +1,17 @@
 package com.company.crms.common.util;
 
+import com.alibaba.excel.EasyExcel;
+import com.alibaba.excel.context.AnalysisContext;
+import com.alibaba.excel.event.AnalysisEventListener;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -173,5 +180,52 @@ class ExcelImportHelperTest {
     @Test
     void isEmptyRow_true_when_null() {
         assertTrue(ExcelImportHelper.isEmptyRow(null));
+    }
+
+    // ---------------- trim ----------------
+
+    @Test
+    void trim_returns_null_for_null_or_blank() {
+        assertEquals(null, ExcelImportHelper.trim(null));
+        assertEquals(null, ExcelImportHelper.trim(""));
+        assertEquals(null, ExcelImportHelper.trim("   "));
+    }
+
+    @Test
+    void trim_strips_surrounding_spaces() {
+        assertEquals("abc", ExcelImportHelper.trim("  abc  "));
+    }
+
+    // ---------------- writeTemplate ----------------
+
+    @Test
+    void writeTemplate_writes_expected_header() {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        String[] headers = {"列A", "列B", "列C"};
+        ExcelImportHelper.writeTemplate(out, headers, "模板页");
+
+        List<Map<Integer, String>> heads = new ArrayList<>();
+        EasyExcel.read(new ByteArrayInputStream(out.toByteArray()),
+                new AnalysisEventListener<Map<Integer, String>>() {
+                    @Override
+                    public void invokeHeadMap(Map<Integer, String> headMap, AnalysisContext context) {
+                        heads.add(headMap);
+                    }
+
+                    @Override
+                    public void invoke(Map<Integer, String> data, AnalysisContext context) {
+                        /* 模板不含数据行，不应被调用 */
+                    }
+
+                    @Override
+                    public void doAfterAllAnalysed(AnalysisContext context) {
+                        /* nothing */
+                    }
+                }).headRowNumber(1).sheet().doRead();
+
+        assertEquals(1, heads.size());
+        assertEquals("列A", heads.get(0).get(0));
+        assertEquals("列B", heads.get(0).get(1));
+        assertEquals("列C", heads.get(0).get(2));
     }
 }

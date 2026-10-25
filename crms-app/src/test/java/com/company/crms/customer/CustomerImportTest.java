@@ -2,6 +2,7 @@ package com.company.crms.customer;
 
 import com.alibaba.excel.EasyExcel;
 import com.company.crms.common.response.ImportResultVO;
+import com.company.crms.common.util.ExcelImportHelper;
 import com.company.crms.customer.dto.CreateCustomerDTO;
 import com.company.crms.customer.service.CustomerService;
 import com.company.crms.customer.service.impl.CustomerImportServiceImpl;
@@ -13,10 +14,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.io.ByteArrayOutputStream;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
@@ -144,5 +147,31 @@ class CustomerImportTest {
 
         ImportResultVO r = importService.importCustomers(file);
         assertEquals(1, r.getSuccess());
+    }
+
+    @Test
+    void should_reject_when_rows_exceed_max_limit() {
+        List<List<Object>> rows = new ArrayList<>();
+        for (int i = 0; i < ExcelImportHelper.MAX_ROWS + 1; i++) {
+            rows.add(Arrays.asList("客户" + i, "企业", "", "A", "", "", "", ""));
+        }
+        byte[] data = buildExcel(HEADER, rows);
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "customers.xlsx", "x", data);
+
+        RuntimeException ex = assertThrows(RuntimeException.class,
+                () -> importService.importCustomers(file));
+        assertTrue(messageChainContains(ex, "不能超过 " + ExcelImportHelper.MAX_ROWS + " 行"));
+    }
+
+    private static boolean messageChainContains(Throwable e, String keyword) {
+        Throwable t = e;
+        while (t != null) {
+            if (t.getMessage() != null && t.getMessage().contains(keyword)) {
+                return true;
+            }
+            t = (t.getCause() == t) ? null : t.getCause();
+        }
+        return false;
     }
 }
