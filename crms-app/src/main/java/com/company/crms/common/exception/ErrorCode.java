@@ -51,6 +51,15 @@ public enum ErrorCode {
     PM_RED_AMOUNT_INVALID("PM-004", "红冲金额非法"),
     PM_RED_REVERSED("PM-005", "记录已红冲"),
     PM_IMPORT_FAILED("PM-006", "批量导入失败"),
+    PM_PLAN_PERIOD_DUPLICATE("PM-007", "回款计划期数重复"),
+    PM_PLAN_PERIOD_REQUIRED("PM-008", "实际回款必须指定回款计划期数"),
+
+    // 收入确认
+    RV_NOT_FOUND("RV-001", "收入明细不存在"),
+    RV_AMOUNT_MISMATCH("RV-002", "收入合计与合同金额不一致"),
+    RV_PERIOD_INVALID("RV-003", "收入归属期间非法"),
+    RV_BALANCE_MISMATCH("RV-004", "收入确认时点不平衡"),
+    RV_PLAN_REQUIRED("RV-005", "该合同尚未录入有效回款计划"),
 
     // 通知
     NT_NOT_FOUND("NT-001", "通知不存在"),

@@ -29,4 +29,16 @@ public interface SettlementService {
      * @return 实际核销总额。
      */
     BigDecimal settle(PaymentRecord record, List<Long> targetPlanIds);
+
+    /**
+     * 按「合同 + 期数」定位唯一回款计划并核销。
+     *
+     * <p>期数必填；金额不足该期待核销额时允许部分核销，差额回写 {@code payment_record.unallocated_amount}，
+     * 不跨期外溢。
+     *
+     * @param record 已写入数据库的实际回款记录（status=NORMAL）
+     * @param periodNo 回款计划期数
+     * @return 实际核销金额
+     */
+    BigDecimal settleByPeriod(PaymentRecord record, Integer periodNo);
 }

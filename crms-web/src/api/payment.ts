@@ -29,6 +29,8 @@ export interface PaymentRecordVO {
   contractId: string
   contractCode?: string
   contractName?: string
+  /** 关联回款计划期数。 */
+  periodNo: number
   arrivalDate: string
   amount: number
   payer?: string
@@ -55,6 +57,7 @@ export interface RecordQuery {
   contractId?: string
   keyword?: string
   status?: string
+  periodNo?: number
   fromDate?: string
   toDate?: string
   page?: number
@@ -86,13 +89,40 @@ export interface GeneratePlansDTO {
 
 export interface CreateRecordDTO {
   contractId: string
+  /** 回款计划期数，必填：按「合同 + 期数」自动核销。 */
+  periodNo: number
   arrivalDate: string
   amount: number
   payer?: string
   voucherNo?: string
   remark?: string
   voucherFileId?: string
-  targetPlanIds?: string[]
+}
+
+export interface PaymentPlanSummaryVO {
+  contractId: string
+  contractCode: string
+  contractName: string
+  contractAmount: number
+  plannedAmount: number
+  diff: number
+  planCount: number
+  complete: boolean
+}
+
+export interface BatchPlanItem {
+  periodNo: number
+  planDate: string
+  planAmount: number
+  remindDays?: number
+  remark?: string
+}
+
+export interface BatchPlanDTO {
+  contractId: string
+  plans: BatchPlanItem[]
+  /** true=整批覆盖（要求无核销记录），默认 true。 */
+  overwrite?: boolean
 }
 
 export interface ManualSettleDTO {
@@ -128,7 +158,18 @@ export const paymentPlanApi = {
   create: (dto: CreatePlanDTO) => post<string>('/payment-plans', dto),
   generate: (dto: GeneratePlansDTO) => post<string[]>('/payment-plans/generate', dto),
   update: (id: string, dto: UpdatePlanDTO) => put<void>(`/payment-plans/${id}`, dto),
-  remove: (id: string) => del<void>(`/payment-plans/${id}`)
+  remove: (id: string) => del<void>(`/payment-plans/${id}`),
+  batch: (dto: BatchPlanDTO) => post<string[]>('/payment-plans/batch', dto),
+  summary: (contractId: string) => get<PaymentPlanSummaryVO>(`/payment-plans/summary/${contractId}`),
+  importExcel: (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return http.post<unknown, ImportResultVO>('/payment-plans/import', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
+  downloadTemplate: () =>
+    http.get<unknown, Blob>('/payment-plans/template', { responseType: 'blob' })
 }
 
 export const paymentRecordApi = {

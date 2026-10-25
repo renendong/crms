@@ -2,17 +2,22 @@ package com.company.crms.payment.dto;
 
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.List;
 
 @Data
 public class CreateRecordDTO {
     @NotNull
     private Long contractId;
+
+    /** 回款计划期数，必填：按「合同 + 期数」定位唯一计划核销。 */
+    @NotNull
+    @Positive
+    private Integer periodNo;
 
     @NotNull
     private LocalDate arrivalDate;
@@ -31,7 +36,4 @@ public class CreateRecordDTO {
     private String remark;
 
     private Long voucherFileId;
-
-    /** 可选：手工指定要核销的回款计划 id 列表，留空则按 plan_date 自动核销。 */
-    private List<Long> targetPlanIds;
 }

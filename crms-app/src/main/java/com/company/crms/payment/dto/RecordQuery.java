@@ -8,6 +8,7 @@ import java.time.LocalDate;
 @Data
 public class RecordQuery {
     private Long contractId;
+    private Integer periodNo;
     private String keyword;
     private String status;
     private LocalDate fromDate;

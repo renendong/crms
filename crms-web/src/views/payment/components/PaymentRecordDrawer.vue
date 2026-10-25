@@ -34,8 +34,26 @@
           style="width: 100%"
         />
       </el-form-item>
+      <el-form-item label="期数" prop="periodNo">
+        <el-select
+          v-model="form.periodNo"
+          placeholder="请选择回款计划期数"
+          style="width: 100%"
+          :disabled="!form.contractId"
+        >
+          <el-option
+            v-for="p in plans"
+            :key="p.id"
+            :label="`第 ${p.periodNo} 期 · ${p.planDate} · 待核销 ${Number(p.unsettledAmount).toLocaleString()}`"
+            :value="p.periodNo"
+          />
+        </el-select>
+        <div v-if="form.contractId && !plans.length" class="hint">
+          该合同暂无未结清的回款计划，请先在「回款计划」中录入
+        </div>
+      </el-form-item>
       <el-form-item label="金额" prop="amount">
-        <el-input-number v-model="form.amount" :min="0.01" :precision="2" :step="1000" style="width: 100%" />
+        <el-input-number v-model="form.amount" :min="0" :precision="2" :step="1000" style="width: 100%" />
       </el-form-item>
       <el-form-item label="付款方">
         <el-input v-model="form.payer" maxlength="100" />
@@ -45,18 +63,6 @@
       </el-form-item>
       <el-form-item label="备注">
         <el-input v-model="form.remark" type="textarea" :rows="3" maxlength="500" />
-      </el-form-item>
-
-      <el-form-item v-if="plans.length" label="核销计划">
-        <el-select v-model="form.targetPlanIds" multiple placeholder="留空则按 plan_date 自动核销" style="width: 100%">
-          <el-option
-            v-for="p in plans"
-            :key="p.id"
-            :label="`#${p.periodNo} ${p.planDate} 待核 ${p.unsettledAmount}`"
-            :value="p.id"
-            :disabled="p.status === 'SETTLED'"
-          />
-        </el-select>
       </el-form-item>
     </el-form>
 
@@ -82,12 +88,16 @@ const contractLoading = ref(false)
 const contractOptions = ref<ContractVO[]>([])
 const plans = ref<PaymentPlanVO[]>([])
 
-const form = reactive<CreateRecordDTO>(emptyForm())
+const form = reactive<RecordForm>(emptyForm())
 
 const rules: FormRules = {
   contractId: [{ required: true, message: '请选择合同', trigger: 'change' }],
+  periodNo: [{ required: true, message: '请选择回款计划期数', trigger: 'change' }],
   arrivalDate: [{ required: true, message: '请选择到账日期', trigger: 'change' }],
-  amount: [{ required: true, message: '请填写金额', trigger: 'blur' }]
+  amount: [
+    { required: true, message: '请填写金额', trigger: 'blur' },
+    { type: 'number', min: 0.01, message: '金额必须大于 0', trigger: 'blur' }
+  ]
 }
 
 watch(
@@ -126,6 +136,7 @@ async function searchContract(keyword: string) {
 }
 
 async function onContractChange(id: string) {
+  form.periodNo = undefined
   if (!id) {
     plans.value = []
     return
@@ -143,7 +154,7 @@ async function onSave() {
   if (!valid) return
   saving.value = true
   try {
-    await paymentRecordApi.create(form)
+    await paymentRecordApi.create({ ...form, periodNo: form.periodNo as number })
     ElMessage.success('已登记并执行核销')
     emit('saved')
   } finally {
@@ -151,15 +162,26 @@ async function onSave() {
   }
 }
 
-function emptyForm(): CreateRecordDTO {
+type RecordForm = Omit<CreateRecordDTO, 'periodNo'> & { periodNo?: number }
+
+function emptyForm(): RecordForm {
   return {
     contractId: '',
+    periodNo: undefined,
     arrivalDate: new Date().toISOString().slice(0, 10),
     amount: 0,
     payer: '',
     voucherNo: '',
-    remark: '',
-    targetPlanIds: []
+    remark: ''
   }
 }
 </script>
+
+<style scoped>
+.hint {
+  margin-top: 4px;
+  color: #e6a23c;
+  font-size: 12px;
+  line-height: 1.4;
+}
+</style>

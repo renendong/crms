@@ -30,7 +30,7 @@ import java.util.Set;
 public class PaymentImportServiceImpl implements PaymentImportService {
 
     private static final String[] HEADERS = {
-            "合同编号", "到账日期", "金额", "付款方", "凭证号", "备注"
+            "合同编号", "期数", "到账日期", "金额", "付款方", "凭证号", "备注"
     };
 
     private final ContractMapper contractMapper;
@@ -115,11 +115,12 @@ public class PaymentImportServiceImpl implements PaymentImportService {
 
     private void importRow(Map<Integer, String> row, Set<String> seenVoucher) {
         String contractCode = ExcelImportHelper.trim(row.get(0));
-        String arrivalStr = ExcelImportHelper.trim(row.get(1));
-        String amountStr = ExcelImportHelper.trim(row.get(2));
-        String payer = ExcelImportHelper.trim(row.get(3));
-        String voucherNo = ExcelImportHelper.trim(row.get(4));
-        String remark = ExcelImportHelper.trim(row.get(5));
+        String periodStr = ExcelImportHelper.trim(row.get(1));
+        String arrivalStr = ExcelImportHelper.trim(row.get(2));
+        String amountStr = ExcelImportHelper.trim(row.get(3));
+        String payer = ExcelImportHelper.trim(row.get(4));
+        String voucherNo = ExcelImportHelper.trim(row.get(5));
+        String remark = ExcelImportHelper.trim(row.get(6));
 
         if (contractCode == null) {
             throw new IllegalArgumentException("合同编号不能为空");
@@ -129,6 +130,18 @@ public class PaymentImportServiceImpl implements PaymentImportService {
                 .eq("is_deleted", 0));
         if (c == null) {
             throw new IllegalArgumentException("合同 [" + contractCode + "] 不存在");
+        }
+        if (periodStr == null) {
+            throw new IllegalArgumentException("期数不能为空");
+        }
+        int periodNo;
+        try {
+            periodNo = Integer.parseInt(periodStr.trim());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("期数必须是整数");
+        }
+        if (periodNo <= 0) {
+            throw new IllegalArgumentException("期数必须大于 0");
         }
         LocalDate arrival = ExcelImportHelper.parseDateFlexible(arrivalStr, "到账日期");
         BigDecimal amount = ExcelImportHelper.parseAmount(amountStr, "金额");
@@ -143,6 +156,7 @@ public class PaymentImportServiceImpl implements PaymentImportService {
 
         CreateRecordDTO dto = new CreateRecordDTO();
         dto.setContractId(c.getId());
+        dto.setPeriodNo(periodNo);
         dto.setArrivalDate(arrival);
         dto.setAmount(amount);
         dto.setPayer(payer);

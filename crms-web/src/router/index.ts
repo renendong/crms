@@ -75,6 +75,12 @@ export const businessRoutes: RouteRecordRaw[] = [
         meta: { title: '账龄分析', icon: 'PieChart', perm: 'report:payment' }
       },
       {
+        path: 'revenues',
+        name: 'RevenueList',
+        component: () => import('@/views/revenue/RevenueList.vue'),
+        meta: { title: '收入确认', icon: 'Coin', perm: 'revenue:list' }
+      },
+      {
         path: 'reports',
         name: 'Report',
         component: () => import('@/views/report/ReportView.vue'),

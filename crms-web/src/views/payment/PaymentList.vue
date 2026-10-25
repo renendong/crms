@@ -12,6 +12,9 @@
                 <el-option v-for="(meta, key) in PaymentRecordStatus" :key="key" :label="meta.label" :value="key" />
               </el-select>
             </el-form-item>
+            <el-form-item label="期数">
+              <el-input-number v-model="rq.periodNo" :min="1" :controls="false" placeholder="全部" style="width: 90px" />
+            </el-form-item>
             <el-form-item label="到账日期">
               <el-date-picker
                 v-model="rRange"
@@ -37,6 +40,7 @@
 
           <el-table v-loading="recordsLoading" :data="records" stripe border>
             <el-table-column prop="contractCode" label="合同编号" width="160" />
+            <el-table-column prop="periodNo" label="期数" width="80" align="center" />
             <el-table-column label="到账日期" width="120">
               <template #default="{ row }">{{ row.arrivalDate }}</template>
             </el-table-column>
@@ -105,6 +109,26 @@
 
         <el-tab-pane label="回款计划" name="plans">
           <el-form inline class="search-bar">
+            <el-form-item label="合同">
+              <el-select
+                v-model="planContractId"
+                filterable
+                remote
+                clearable
+                :remote-method="searchPlanContract"
+                :loading="planContractLoading"
+                placeholder="输入合同名称/编号"
+                style="width: 260px"
+                @change="onPlanContractChange"
+              >
+                <el-option
+                  v-for="c in planContractOptions"
+                  :key="c.id"
+                  :label="`${c.code} ${c.name}`"
+                  :value="c.id"
+                />
+              </el-select>
+            </el-form-item>
             <el-form-item label="状态">
               <el-select v-model="pq.status" placeholder="全部" clearable style="width: 140px">
                 <el-option v-for="(meta, key) in PaymentPlanStatus" :key="key" :label="meta.label" :value="key" />
@@ -129,6 +153,38 @@
               <el-button @click="onResetPlans">重置</el-button>
             </el-form-item>
           </el-form>
+
+          <el-alert
+            v-if="planSummary"
+            :type="planSummary.complete ? 'success' : 'error'"
+            :closable="false"
+            show-icon
+            class="mb-2"
+          >
+            合同 {{ planSummary.contractCode }} 金额 {{ money(planSummary.contractAmount) }}，
+            已排计划合计 {{ money(planSummary.plannedAmount) }}（{{ planSummary.planCount }} 期），
+            差额 <strong>{{ money(planSummary.diff) }}</strong>
+            <template v-if="!planSummary.complete">：同一合同回款计划合计必须恰好等于合同金额</template>
+          </el-alert>
+
+          <div class="toolbar">
+            <el-button
+              v-perm="'payment:plan'"
+              type="primary"
+              :icon="Plus"
+              :disabled="!planContractId"
+              @click="openPlanForm(null)"
+            >
+              新增计划
+            </el-button>
+            <el-button v-perm="'payment:plan'" :icon="Tickets" :disabled="!planContractId" @click="planBatchDialog = true">
+              批量录入
+            </el-button>
+            <el-button v-perm="'payment:plan_import'" :icon="Upload" @click="planImportDialog = true">
+              导入 Excel
+            </el-button>
+            <el-button :icon="Refresh" circle @click="reloadPlans" />
+          </div>
 
           <el-table v-loading="plansLoading" :data="plans" stripe border>
             <el-table-column prop="contractCode" label="合同编号" width="160" />
@@ -156,6 +212,22 @@
                 <span v-else>-</span>
               </template>
             </el-table-column>
+            <el-table-column label="操作" width="140" fixed="right" align="center">
+              <template #default="{ row }">
+                <el-button v-perm="'payment:plan'" link size="small" @click="openPlanForm(row)">编辑</el-button>
+                <el-popconfirm
+                  v-if="Number(row.settledAmount) === 0"
+                  :title="`确认删除第 ${row.periodNo} 期？`"
+                  @confirm="onDeletePlan(row)"
+                >
+                  <template #reference>
+                    <el-button v-perm="'payment:plan'" link size="small">
+                      <span class="text-danger">删除</span>
+                    </el-button>
+                  </template>
+                </el-popconfirm>
+              </template>
+            </el-table-column>
           </el-table>
           <el-pagination
             v-model:current-page="pq.page"
@@ -174,6 +246,24 @@
     <PaymentRecordDrawer v-model:visible="recordDrawer" @saved="onRecordSaved" />
     <PaymentImportDialog v-model:visible="importDialog" @finished="loadRecords" />
     <RedReverseDialog v-model:visible="redDialog" :record="redTarget" @saved="onRedSaved" />
+
+    <PaymentPlanFormDialog
+      v-model:visible="planFormDialog"
+      :contract-id="planContractId"
+      :plan="planEditing"
+      :next-period-no="nextPeriodNo"
+      @saved="onPlanSaved"
+    />
+    <PaymentPlanBatchDialog v-model:visible="planBatchDialog" :contract-id="planContractId" @saved="onPlanSaved" />
+    <ImportExcelDialog
+      v-model:visible="planImportDialog"
+      title="批量导入回款计划"
+      hint="Excel 列顺序：合同编号 / 期数 / 计划日期 (yyyy-MM-dd) / 计划金额 / 提醒天数 / 备注。第一行为表头；同一合同的计划合计必须等于合同金额。"
+      :import-fn="paymentPlanApi.importExcel"
+      :download-template-fn="paymentPlanApi.downloadTemplate"
+      template-filename="回款计划导入模板.xlsx"
+      @finished="reloadPlans"
+    />
 
     <el-dialog v-model="settleDialog" title="手工核销" width="640px">
       <p v-if="settleTarget" class="text-muted">
@@ -209,21 +299,26 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Plus, Refresh, Upload } from '@element-plus/icons-vue'
+import { Plus, Refresh, Tickets, Upload } from '@element-plus/icons-vue'
 import {
   paymentPlanApi,
   paymentRecordApi,
   PaymentPlanStatus,
   PaymentRecordStatus,
+  type PaymentPlanSummaryVO,
   type PaymentPlanVO,
   type PaymentRecordVO,
   type PlanQuery,
   type RecordQuery
 } from '@/api/payment'
+import { contractApi, type ContractVO } from '@/api/contract'
+import ImportExcelDialog from '@/components/ImportExcelDialog.vue'
 import PaymentRecordDrawer from './components/PaymentRecordDrawer.vue'
 import PaymentImportDialog from './components/PaymentImportDialog.vue'
+import PaymentPlanFormDialog from './components/PaymentPlanFormDialog.vue'
+import PaymentPlanBatchDialog from './components/PaymentPlanBatchDialog.vue'
 import RedReverseDialog from './components/RedReverseDialog.vue'
 
 const tab = ref<'records' | 'plans'>('records')
@@ -244,6 +339,22 @@ const pRange = ref<[string, string] | null>(null)
 const plans = ref<PaymentPlanVO[]>([])
 const plansTotal = ref(0)
 const plansLoading = ref(false)
+
+const planContractId = ref('')
+const planContractOptions = ref<ContractVO[]>([])
+const planContractLoading = ref(false)
+const planSummary = ref<PaymentPlanSummaryVO | null>(null)
+const planFormDialog = ref(false)
+const planEditing = ref<PaymentPlanVO | null>(null)
+const planBatchDialog = ref(false)
+const planImportDialog = ref(false)
+
+const nextPeriodNo = computed(() => {
+  const periods = plans.value
+    .filter((p) => p.contractId === planContractId.value)
+    .map((p) => Number(p.periodNo || 0))
+  return periods.reduce((max, n) => Math.max(max, n), 0) + 1
+})
 
 watch(pRange, (v) => {
   pq.fromDate = v?.[0]
@@ -290,9 +401,70 @@ async function loadPlans() {
 }
 
 function onResetPlans() {
-  Object.assign(pq, { page: 1, size: 20 })
+  Object.assign(pq, { page: 1, size: 20, contractId: undefined })
+  planContractId.value = ''
+  planSummary.value = null
   pRange.value = null
   loadPlans()
+}
+
+function reloadPlans() {
+  loadPlans()
+  loadPlanSummary()
+}
+
+async function loadPlanSummary() {
+  if (!planContractId.value) {
+    planSummary.value = null
+    return
+  }
+  try {
+    planSummary.value = await paymentPlanApi.summary(planContractId.value)
+  } catch {
+    planSummary.value = null
+  }
+}
+
+async function searchPlanContract(keyword: string) {
+  if (!keyword) {
+    planContractOptions.value = []
+    return
+  }
+  planContractLoading.value = true
+  try {
+    const res = await contractApi.list({ keyword, page: 1, size: 20 })
+    planContractOptions.value = res.items
+  } finally {
+    planContractLoading.value = false
+  }
+}
+
+function onPlanContractChange(id?: string) {
+  pq.contractId = id || undefined
+  pq.page = 1
+  loadPlans()
+  loadPlanSummary()
+}
+
+function openPlanForm(row: PaymentPlanVO | null) {
+  planEditing.value = row
+  planFormDialog.value = true
+}
+
+function onPlanSaved() {
+  planFormDialog.value = false
+  planBatchDialog.value = false
+  reloadPlans()
+}
+
+async function onDeletePlan(row: PaymentPlanVO) {
+  await paymentPlanApi.remove(row.id)
+  ElMessage.success('已删除')
+  reloadPlans()
+}
+
+function money(v: number | undefined) {
+  return Number(v || 0).toLocaleString()
 }
 
 async function onDeleteRecord(row: PaymentRecordVO) {
@@ -373,6 +545,10 @@ watch(tab, (v) => {
 
 .mt-2 {
   margin-top: 12px;
+}
+
+.mb-2 {
+  margin-bottom: 12px;
 }
 
 .text-muted {

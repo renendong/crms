@@ -12,6 +12,7 @@ public class PaymentRecordVO implements Serializable {
     private Long contractId;
     private String contractCode;
     private String contractName;
+    private Integer periodNo;
     private LocalDate arrivalDate;
     private BigDecimal amount;
     private String payer;

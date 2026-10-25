@@ -105,4 +105,71 @@ public class SettlementServiceImpl implements SettlementService {
                 locked.getId(), locked.getContractId(), totalSettled, remaining);
         return totalSettled;
     }
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRED, rollbackFor = Exception.class)
+    public BigDecimal settleByPeriod(PaymentRecord record, Integer periodNo) {
+        if (periodNo == null) {
+            throw new BizException(ErrorCode.PM_PLAN_PERIOD_REQUIRED);
+        }
+        // 1) 锁定 record，避免并发重复核销
+        PaymentRecord locked = recordMapper.selectForUpdate(record.getId());
+        if (locked == null) {
+            throw new BizException(ErrorCode.PM_PLAN_NOT_FOUND, "回款记录不存在");
+        }
+        if ("REVERSED".equals(locked.getStatus()) || "RED".equals(locked.getStatus())) {
+            throw new BizException(ErrorCode.PM_RED_REVERSED);
+        }
+
+        // 2) 锁定「合同 + 期数」对应的计划
+        PaymentPlan plan = planMapper.selectByContractAndPeriodForUpdate(locked.getContractId(), periodNo);
+        if (plan == null) {
+            throw new BizException(ErrorCode.PM_PLAN_NOT_FOUND,
+                    "第 " + periodNo + " 期回款计划不存在");
+        }
+        if ("SETTLED".equals(plan.getStatus())) {
+            throw new BizException(ErrorCode.PM_PLAN_SETTLED, "第 " + periodNo + " 期已结清");
+        }
+
+        // 3) 只在本期内核销，金额不足时部分核销，其余留在 unallocated_amount
+        BigDecimal remaining = locked.getUnallocatedAmount() == null
+                ? locked.getAmount()
+                : locked.getUnallocatedAmount();
+        BigDecimal portion = plan.getUnsettledAmount().min(remaining);
+        BigDecimal totalSettled = BigDecimal.ZERO;
+        if (portion.signum() > 0) {
+            PaymentSettlement st = new PaymentSettlement();
+            st.setId(SnowflakeIdGenerator.next());
+            st.setPaymentPlanId(plan.getId());
+            st.setPaymentRecordId(locked.getId());
+            st.setSettleAmount(portion);
+            st.setSettleAt(LocalDateTime.now());
+            st.setSettleType("AUTO");
+            settlementMapper.insert(st);
+
+            BigDecimal newUnsettled = plan.getUnsettledAmount().subtract(portion);
+            PaymentPlan upd = new PaymentPlan();
+            upd.setId(plan.getId());
+            upd.setVersion(plan.getVersion());
+            upd.setSettledAmount(plan.getSettledAmount().add(portion));
+            upd.setUnsettledAmount(newUnsettled);
+            upd.setStatus(newUnsettled.signum() == 0 ? "SETTLED" : "PARTIAL");
+            if (planMapper.updateById(upd) == 0) {
+                throw new BizException(ErrorCode.SYS_ERROR, "并发冲突，核销失败");
+            }
+            remaining = remaining.subtract(portion);
+            totalSettled = portion;
+        }
+
+        // 4) 回写 record 的 unallocated_amount
+        PaymentRecord updRec = new PaymentRecord();
+        updRec.setId(locked.getId());
+        updRec.setVersion(locked.getVersion());
+        updRec.setUnallocatedAmount(remaining);
+        recordMapper.updateById(updRec);
+
+        log.info("[settle-by-period] record={} contract={} period={} settled={} remaining={}",
+                locked.getId(), locked.getContractId(), periodNo, totalSettled, remaining);
+        return totalSettled;
+    }
 }

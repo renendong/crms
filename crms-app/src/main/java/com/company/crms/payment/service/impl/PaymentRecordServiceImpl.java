@@ -46,6 +46,7 @@ public class PaymentRecordServiceImpl implements PaymentRecordService {
         Page<PaymentRecord> page = Page.of(query.getPage(), query.getSize());
         QueryWrapper<PaymentRecord> w = new QueryWrapper<>();
         if (query.getContractId() != null) w.eq("contract_id", query.getContractId());
+        if (query.getPeriodNo() != null) w.eq("period_no", query.getPeriodNo());
         if (query.getKeyword() != null && !query.getKeyword().isBlank()) {
             String kw = query.getKeyword().trim();
             w.and(x -> x.like("payer", kw).or().like("voucher_no", kw));
@@ -84,9 +85,13 @@ public class PaymentRecordServiceImpl implements PaymentRecordService {
         if (contractMapper.selectById(dto.getContractId()) == null) {
             throw new BizException(ErrorCode.CT_NOT_FOUND);
         }
+        if (dto.getPeriodNo() == null) {
+            throw new BizException(ErrorCode.PM_PLAN_PERIOD_REQUIRED);
+        }
         PaymentRecord r = new PaymentRecord();
         r.setId(SnowflakeIdGenerator.next());
         r.setContractId(dto.getContractId());
+        r.setPeriodNo(dto.getPeriodNo());
         r.setArrivalDate(dto.getArrivalDate());
         r.setAmount(dto.getAmount());
         r.setPayer(dto.getPayer());
@@ -97,8 +102,9 @@ public class PaymentRecordServiceImpl implements PaymentRecordService {
         r.setVoucherFileId(dto.getVoucherFileId());
         recordMapper.insert(r);
 
-        BigDecimal settled = settlementService.settle(r, dto.getTargetPlanIds());
-        log.info("created record {} amount={} settled={}", r.getId(), r.getAmount(), settled);
+        BigDecimal settled = settlementService.settleByPeriod(r, dto.getPeriodNo());
+        log.info("created record {} period={} amount={} settled={}",
+                r.getId(), r.getPeriodNo(), r.getAmount(), settled);
         return r.getId();
     }
 

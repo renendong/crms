@@ -22,7 +22,6 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -30,6 +29,8 @@ import static org.mockito.Mockito.when;
 /**
  * Excel 批量导入回款的集成 / 单测：
  * 构造 .xlsx 内存流，验证成功 + 失败行的统计与错误回执。
+ *
+ * <p>模板自本期起新增「期数」列（第 2 列），导入后按合同 + 期数自动核销对应回款计划。
  */
 @ExtendWith(MockitoExtension.class)
 class PaymentImportTest {
@@ -44,6 +45,7 @@ class PaymentImportTest {
         EasyExcel.write(out)
                 .head(Arrays.asList(
                         java.util.Collections.singletonList("合同编号"),
+                        java.util.Collections.singletonList("期数"),
                         java.util.Collections.singletonList("到账日期"),
                         java.util.Collections.singletonList("金额"),
                         java.util.Collections.singletonList("付款方"),
@@ -55,6 +57,12 @@ class PaymentImportTest {
         return out.toByteArray();
     }
 
+    private MockMultipartFile file(byte[] data) {
+        return new MockMultipartFile(
+                "file", "records.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", data);
+    }
+
     @Test
     void should_import_success_rows_and_record_errors() {
         Contract c = new Contract();
@@ -64,15 +72,12 @@ class PaymentImportTest {
         when(recordService.create(any(CreateRecordDTO.class))).thenReturn(11L);
 
         byte[] data = buildExcel(List.of(
-                Arrays.asList("CT-A", "2026-04-01", "1000.00", "客户A", "V001", "备注1"),
-                Arrays.asList("CT-A", "bad-date", "2000.00", "客户B", "V002", ""),
-                Arrays.asList("CT-A", "2026-04-02", "abc",     "客户C", "V003", "")
+                Arrays.asList("CT-A", "1", "2026-04-01", "1000.00", "客户A", "V001", "备注1"),
+                Arrays.asList("CT-A", "1", "bad-date", "2000.00", "客户B", "V002", ""),
+                Arrays.asList("CT-A", "1", "2026-04-02", "abc",     "客户C", "V003", "")
         ));
-        MockMultipartFile file = new MockMultipartFile(
-                "file", "records.xlsx",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", data);
 
-        ImportResultVO r = importService.importRecords(file);
+        ImportResultVO r = importService.importRecords(file(data));
 
         assertEquals(3, r.getTotal());
         assertEquals(1, r.getSuccess());
@@ -89,13 +94,10 @@ class PaymentImportTest {
         when(contractMapper.selectOne(any())).thenReturn(null);
 
         byte[] data = buildExcel(List.of(
-                Arrays.asList("UNKNOWN", "2026-04-01", "1000", "客户A", "V001", "")
+                Arrays.asList("UNKNOWN", "1", "2026-04-01", "1000", "客户A", "V001", "")
         ));
-        MockMultipartFile file = new MockMultipartFile(
-                "file", "records.xlsx",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", data);
 
-        ImportResultVO r = importService.importRecords(file);
+        ImportResultVO r = importService.importRecords(file(data));
         assertEquals(1, r.getTotal());
         assertEquals(0, r.getSuccess());
         assertEquals(1, r.getFailed());
@@ -110,16 +112,15 @@ class PaymentImportTest {
         when(recordService.create(any(CreateRecordDTO.class))).thenAnswer(invocation -> {
             CreateRecordDTO dto = invocation.getArgument(0);
             assertEquals(new BigDecimal("1234567.89"), dto.getAmount());
+            assertEquals(2, dto.getPeriodNo());
             return 1L;
         });
 
         byte[] data = buildExcel(List.of(
-                Arrays.asList("CT-A", "2026-04-01", "1,234,567.89", "客户A", "V001", "")
+                Arrays.asList("CT-A", "2", "2026-04-01", "1,234,567.89", "客户A", "V001", "")
         ));
-        MockMultipartFile file = new MockMultipartFile(
-                "file", "records.xlsx", "x", data);
 
-        ImportResultVO r = importService.importRecords(file);
+        ImportResultVO r = importService.importRecords(file(data));
         assertEquals(1, r.getSuccess());
     }
 
@@ -131,14 +132,12 @@ class PaymentImportTest {
         when(recordService.create(any(CreateRecordDTO.class))).thenReturn(1L);
 
         byte[] data = buildExcel(List.of(
-                Arrays.asList("CT-A", "2026-04-01", "1000", "客户A", "V001", ""),
-                Arrays.asList("", "", "", "", "", ""),
-                Arrays.asList("CT-A", "2026-04-02", "2000", "客户B", "V002", "")
+                Arrays.asList("CT-A", "1", "2026-04-01", "1000", "客户A", "V001", ""),
+                Arrays.asList("", "", "", "", "", "", ""),
+                Arrays.asList("CT-A", "1", "2026-04-02", "2000", "客户B", "V002", "")
         ));
-        MockMultipartFile file = new MockMultipartFile(
-                "file", "records.xlsx", "x", data);
 
-        ImportResultVO r = importService.importRecords(file);
+        ImportResultVO r = importService.importRecords(file(data));
         assertEquals(2, r.getTotal());
         assertEquals(2, r.getSuccess());
         verify(recordService, times(2)).create(any());
@@ -151,12 +150,10 @@ class PaymentImportTest {
         when(contractMapper.selectOne(any())).thenReturn(c);
 
         byte[] data = buildExcel(List.of(
-                Arrays.asList("CT-A", "2026-04-01", "100.123", "客户A", "V001", "")
+                Arrays.asList("CT-A", "1", "2026-04-01", "100.123", "客户A", "V001", "")
         ));
-        MockMultipartFile file = new MockMultipartFile(
-                "file", "records.xlsx", "x", data);
 
-        ImportResultVO r = importService.importRecords(file);
+        ImportResultVO r = importService.importRecords(file(data));
         assertEquals(1, r.getFailed());
         assertTrue(r.getErrors().get(0).getMessage().contains("2 位小数"));
     }
@@ -173,12 +170,10 @@ class PaymentImportTest {
         });
 
         byte[] data = buildExcel(List.of(
-                Arrays.asList("CT-A", "45658", "1000", "客户A", "V001", "")
+                Arrays.asList("CT-A", "1", "45658", "1000", "客户A", "V001", "")
         ));
-        MockMultipartFile file = new MockMultipartFile(
-                "file", "records.xlsx", "x", data);
 
-        ImportResultVO r = importService.importRecords(file);
+        ImportResultVO r = importService.importRecords(file(data));
         assertEquals(1, r.getSuccess());
     }
 
@@ -190,13 +185,11 @@ class PaymentImportTest {
         when(recordService.create(any(CreateRecordDTO.class))).thenReturn(1L);
 
         byte[] data = buildExcel(List.of(
-                Arrays.asList("CT-A", "2026-04-01", "1000", "客户A", "V-DUP", ""),
-                Arrays.asList("CT-A", "2026-04-02", "2000", "客户B", "V-DUP", "")
+                Arrays.asList("CT-A", "1", "2026-04-01", "1000", "客户A", "V-DUP", ""),
+                Arrays.asList("CT-A", "1", "2026-04-02", "2000", "客户B", "V-DUP", "")
         ));
-        MockMultipartFile file = new MockMultipartFile(
-                "file", "records.xlsx", "x", data);
 
-        ImportResultVO r = importService.importRecords(file);
+        ImportResultVO r = importService.importRecords(file(data));
         assertEquals(1, r.getSuccess());
         assertEquals(1, r.getFailed());
         assertTrue(r.getErrors().get(0).getMessage().contains("文件内已存在相同的凭证号"));
@@ -210,14 +203,42 @@ class PaymentImportTest {
 
         String longPayer = "x".repeat(101);
         byte[] data = buildExcel(List.of(
-                Arrays.asList("CT-A", "2026-04-01", "1000", longPayer, "V001", "")
+                Arrays.asList("CT-A", "1", "2026-04-01", "1000", longPayer, "V001", "")
         ));
-        MockMultipartFile file = new MockMultipartFile(
-                "file", "records.xlsx", "x", data);
 
-        ImportResultVO r = importService.importRecords(file);
+        ImportResultVO r = importService.importRecords(file(data));
         assertEquals(1, r.getFailed());
         assertTrue(r.getErrors().get(0).getMessage().contains("付款方"));
+    }
+
+    @Test
+    void should_fail_when_period_missing() {
+        Contract c = new Contract();
+        c.setId(1L);
+        when(contractMapper.selectOne(any())).thenReturn(c);
+
+        byte[] data = buildExcel(List.of(
+                Arrays.asList("CT-A", "", "2026-04-01", "1000", "客户A", "V001", "")
+        ));
+
+        ImportResultVO r = importService.importRecords(file(data));
+        assertEquals(1, r.getFailed());
+        assertTrue(r.getErrors().get(0).getMessage().contains("期数不能为空"));
+    }
+
+    @Test
+    void should_fail_when_period_not_positive() {
+        Contract c = new Contract();
+        c.setId(1L);
+        when(contractMapper.selectOne(any())).thenReturn(c);
+
+        byte[] data = buildExcel(List.of(
+                Arrays.asList("CT-A", "0", "2026-04-01", "1000", "客户A", "V001", "")
+        ));
+
+        ImportResultVO r = importService.importRecords(file(data));
+        assertEquals(1, r.getFailed());
+        assertTrue(r.getErrors().get(0).getMessage().contains("期数必须大于 0"));
     }
 
     @Test
@@ -226,6 +247,7 @@ class PaymentImportTest {
         EasyExcel.write(out)
                 .head(Arrays.asList(
                         java.util.Collections.singletonList("合同号"),
+                        java.util.Collections.singletonList("期数"),
                         java.util.Collections.singletonList("日期"),
                         java.util.Collections.singletonList("金额"),
                         java.util.Collections.singletonList("付款方"),
@@ -233,11 +255,9 @@ class PaymentImportTest {
                         java.util.Collections.singletonList("备注")
                 ))
                 .sheet("回款")
-                .doWrite(List.of(Arrays.asList("CT-A", "2026-04-01", "1000", "A", "V001", "")));
-        MockMultipartFile file = new MockMultipartFile(
-                "file", "records.xlsx", "x", out.toByteArray());
+                .doWrite(List.of(Arrays.asList("CT-A", "1", "2026-04-01", "1000", "A", "V001", "")));
 
-        ImportResultVO r = importService.importRecords(file);
+        ImportResultVO r = importService.importRecords(file(out.toByteArray()));
         assertEquals(0, r.getTotal());
         assertEquals(1, r.getFailed());
         assertTrue(r.getErrors().get(0).getMessage().contains("表头不正确"));

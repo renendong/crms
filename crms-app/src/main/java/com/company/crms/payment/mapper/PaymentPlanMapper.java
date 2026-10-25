@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Constants;
 import com.company.crms.payment.entity.PaymentPlan;
 import com.company.crms.payment.vo.AgingDrillVO;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -68,6 +69,54 @@ public interface PaymentPlanMapper extends BaseMapper<PaymentPlan> {
         FROM payment_plan WHERE contract_id = #{contractId} AND is_deleted = 0
         """)
     BigDecimal sumPlanAmount(@Param("contractId") Long contractId);
+
+    /**
+     * 合同下未删除计划金额合计，可排除指定计划（编辑场景）。
+     */
+    @Select("""
+        <script>
+        SELECT IFNULL(SUM(plan_amount), 0) FROM payment_plan
+         WHERE contract_id = #{contractId} AND is_deleted = 0
+         <if test="excludeId != null">AND id &lt;&gt; #{excludeId}</if>
+        </script>
+        """)
+    BigDecimal sumPlanAmountExcluding(@Param("contractId") Long contractId,
+                                      @Param("excludeId") Long excludeId);
+
+    /**
+     * 时点平衡公式用：plan_date 晚于指定日期（严格大于）的待核销金额合计。
+     */
+    @Select("""
+        SELECT IFNULL(SUM(unsettled_amount), 0) FROM payment_plan
+         WHERE contract_id = #{contractId} AND is_deleted = 0 AND plan_date > #{date}
+        """)
+    BigDecimal sumUnsettledAfter(@Param("contractId") Long contractId,
+                                 @Param("date") LocalDate date);
+
+    @Select("""
+        SELECT * FROM payment_plan
+         WHERE contract_id = #{contractId} AND period_no = #{periodNo} AND is_deleted = 0
+         LIMIT 1
+        """)
+    PaymentPlan selectByContractAndPeriod(@Param("contractId") Long contractId,
+                                          @Param("periodNo") Integer periodNo);
+
+    @Select("""
+        SELECT * FROM payment_plan
+         WHERE contract_id = #{contractId} AND period_no = #{periodNo} AND is_deleted = 0
+         LIMIT 1 FOR UPDATE
+        """)
+    PaymentPlan selectByContractAndPeriodForUpdate(@Param("contractId") Long contractId,
+                                                   @Param("periodNo") Integer periodNo);
+
+    /**
+     * 物理删除合同下计划。仅用于「覆盖模式整批重建」，
+     * 调用方必须先确认该合同不存在已核销计划（settled_amount > 0）。
+     * 之所以不用软删：payment_plan 上的 uk_plan_contract_period 唯一键不含 is_deleted，
+     * 软删后无法再插入相同期数。
+     */
+    @Delete("DELETE FROM payment_plan WHERE contract_id = #{contractId}")
+    int physicalDeleteByContract(@Param("contractId") Long contractId);
 
     /**
      * 把所有 plan_date < today 且 status != SETTLED 的计划标记为逾期。

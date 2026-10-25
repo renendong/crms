@@ -10,6 +10,9 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+
 @Mapper
 public interface PaymentRecordMapper extends BaseMapper<PaymentRecord> {
 
@@ -30,4 +33,16 @@ public interface PaymentRecordMapper extends BaseMapper<PaymentRecord> {
 
     @Delete("DELETE FROM payment_record WHERE id = #{id}")
     int physicalDelete(@Param("id") Long id);
+
+    /**
+     * 收入确认时点平衡公式用：arrival_date ≤ date 的有效回款合计。
+     * 排除已红冲原单（REVERSED）与红字冲销单（RED），保证净额口径。
+     */
+    @Select("""
+        SELECT IFNULL(SUM(amount), 0) FROM payment_record
+         WHERE contract_id = #{contractId} AND arrival_date <= #{date}
+           AND status = 'NORMAL' AND is_deleted = 0
+        """)
+    BigDecimal sumEffectiveAmountUpTo(@Param("contractId") Long contractId,
+                                      @Param("date") LocalDate date);
 }
